@@ -1,15 +1,17 @@
+# utils/message_formatter.py
+
 import time
 
-def create_message(usd_rate, eur_rate, gold_price, bitcoin_price):
-    """Формирует сообщение с курсами."""
-    if usd_rate is None or eur_rate is None or gold_price is None or bitcoin_price is None:
+def create_message(usd_rub, eur_rub, gold_usd, bitcoin_usd, update_info):
+    if usd_rub is None or eur_rub is None or gold_usd is None or bitcoin_usd is None:
         return "⚠️ Не удалось получить актуальные данные."
 
-    message = f"""💸 ₽{usd_rate:.2f}
-🏆 ₽{eur_rate:.2f}
-🌕 {gold_price:.2f}
-🪩 ${bitcoin_price:,.0f}
+    message = f"""💸 USD: ₽{usd_rub:.2f}
+🏆 EUR: ₽{eur_rub:.2f}
+🌕 Золото (CFD): ${gold_usd:,.2f}/унция
+🪩 BTC: ${bitcoin_usd:,.0f}
 
-Обновлено: {time.strftime('%Y-%m-%d %H:%M:%S')}
+🔄 Обновлено: {update_info}
+🕒 Последнее обновление: {time.strftime('%Y-%m-%d %H:%M:%S')}
 """
     return message

@@ -1,68 +1,74 @@
 import requests
-from datetime import date
-from bs4 import BeautifulSoup
+import time
+import config
 
-def get_gold_price():
-    """Получает учетную цену золота от ЦБ РФ в рублях за грамм."""
+_last_gold_price = None
+_last_gold_update_time = 0
+GOLD_CACHE_TTL = 900  # 15 минут
+
+def get_gold_price_usd():
+    """Возвращает цену золота в USD за унцию от GoldAPI (FOREXCOM)."""
+    global _last_gold_price, _last_gold_update_time
+
+    now = time.time()
+    is_cache_expired = (now - _last_gold_update_time) >= GOLD_CACHE_TTL
+
     try:
-        today = date.today()
-        url = f"https://www.cbr.ru/hd_base/metall/metall_base_new/?UniDbQuery.Posted=True&UniDbQuery.From=01.07.2008&UniDbQuery.To=21.10.2025&UniDbQuery.Gold=true&UniDbQuery.so=1"
+        # Проверка 1: нужно ли обновлять кэш?
+        if _last_gold_price is None or is_cache_expired:
+            # Проверка 2: задан ли API-ключ?
+            if not config.GOLD_API_KEY:
+                print("❌ GOLD_API_KEY не задан в .env")
+                return None
 
-        response = requests.get(url)
-        response.raise_for_status()
-        text = response.text
+            # Проверка 3: формируем корректный URL (без пробелов!)
+            url = "https://www.goldapi.io/api/XAU/USD"
+            headers = {"x-access-token": config.GOLD_API_KEY}
 
-        soup = BeautifulSoup(text, 'html.parser')
-
-        # Попытка найти таблицу с классом "data"
-        table = soup.find('table', class_='data')
-        if not table:
-            print("Не найдена таблица с классом 'data' на сайте ЦБ.")
-            return None
-
-        # Получаем все строки таблицы
-        rows = table.find_all('tr')
-        if not rows or len(rows) < 2:
-            print("В таблице на сайте ЦБ нет данных о золоте.")
-            return None
-
-        # Берем последнюю строку (самая свежая дата)
-        last_row = rows[-1]
-        # Ищем все ячейки (td) в строке
-        cells = last_row.find_all('td')
-
-       # Проверяем, есть ли ячейки в строке
-        if not cells or len(cells) < 2:
-            print("В строке данных о золоте на сайте ЦБ недостаточно ячеек.")
-            return None
-
-        # Пытаемся найти ячейку, содержащую цену (ищем текст, похожий на число)
-        price_cell = None
-        for cell in cells:
-            text = cell.text.replace(',', '.').strip()
             try:
-                float(text)  # Пытаемся преобразовать в число
-                price_cell = cell
-                break  # Нашли ячейку с ценой
+                # Проверка 4: делаем запрос
+                response = requests.get(url, headers=headers, timeout=10)
+                response.raise_for_status()  # Проверка HTTP-ошибок
+            except requests.exceptions.Timeout:
+                print("⚠️ GoldAPI: таймаут запроса")
+                return None
+            except requests.exceptions.ConnectionError:
+                print("⚠️ GoldAPI: ошибка подключения")
+                return None
+            except requests.exceptions.HTTPError as e:
+                print(f"⚠️ GoldAPI: HTTP ошибка {e.response.status_code}")
+                return None
+            except Exception as e:
+                print(f"⚠️ GoldAPI: неизвестная ошибка запроса: {e}")
+                return None
+
+            try:
+                # Проверка 5: парсим JSON
+                data = response.json()
             except ValueError:
-                pass  # Это не число
+                print("❌ GoldAPI: ответ не в формате JSON")
+                return None
 
-        if not price_cell:
-            print("Не удалось найти ячейку с ценой золота на сайте ЦБ.")
-            return None
+            # Проверка 6: есть ли поле 'price'?
+            if "price" in data:
+                try:
+                    raw_price = data["price"]
+                    _last_gold_price = float(raw_price)
+                    _last_gold_update_time = now
+                    print(f"✅ ЗОЛОТО ОБНОВЛЕНО от GoldAPI: ${_last_gold_price:,.2f}/унция")
+                    return _last_gold_price
+                except (TypeError, ValueError):
+                    print(f"❌ GoldAPI: 'price' не является числом: {data['price']}")
+                    return None
+            else:
+                print(f"❌ GoldAPI: в ответе нет поля 'price'. Ответ: {data}")
+                return None
 
-        # Извлекаем цену из найденной ячейки
-        price_str = price_cell.text.replace(',', '.').strip()
-        try:
-            price = float(price_str)
-            return price
-        except ValueError:
-            print("Не удалось преобразовать цену золота в число на сайте ЦБ.")
-            return None
+        else:
+            # Кэш ещё актуален
+            print(f"🔁 ЗОЛОТО: используем кэш (${_last_gold_price:,.2f}/унция, обновление каждые 15 мин)")
+            return _last_gold_price
 
-    except requests.exceptions.RequestException as e:
-        print(f"Ошибка подключения к сайту ЦБ: {e}")
-        return None
     except Exception as e:
-        print(f"Общая ошибка при получении цены золота от ЦБ: {e}")
+        print(f"⚠️ Неожиданная ошибка в get_gold_price_usd: {e}")
         return None
