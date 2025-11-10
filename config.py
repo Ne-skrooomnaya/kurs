@@ -9,6 +9,6 @@ UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', 600))
 LAST_MESSAGE_ID = 177
 
 # Для Bybit (не используются в текущей версии, но оставлены для будущего)
-BYBIT_API_KEY = os.getenv('BYBIT_API_KEY')
-BYBIT_SECRET_KEY = os.getenv('BYBIT_SECRET_KEY')
-BYBIT_PASSPHRASE = os.getenv('BYBIT_PASSPHRASE')
+# BYBIT_API_KEY = os.getenv('BYBIT_API_KEY')
+# BYBIT_SECRET_KEY = os.getenv('BYBIT_SECRET_KEY')
+# BYBIT_PASSPHRASE = os.getenv('BYBIT_PASSPHRASE')

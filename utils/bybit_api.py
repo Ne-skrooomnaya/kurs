@@ -12,7 +12,7 @@ def get_ticker_price(symbol: str):
             "symbol": symbol
         }
         response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()  # ← Добавлено! Выбросит исключение, если HTTP-код не 200
+        response.raise_for_status()  # Выбросит исключение, если HTTP-код не 200
         data = response.json()
 
         if data.get("retCode") == 0 and data.get("result"):
@@ -25,10 +25,10 @@ def get_ticker_price(symbol: str):
         print(f"Исключение при запросе {symbol}: {e}")
         return None
 
+
 def get_usd_rate():
     """Получает курс USD/RUB через ЦБ РФ"""
     try:
-        # Убраны пробелы в URL!
         url = "https://www.cbr-xml-daily.ru/daily_json.js"
         response = requests.get(url)
         data = response.json()
@@ -41,7 +41,6 @@ def get_usd_rate():
 def get_eur_rate():
     """Получает курс EUR/RUB через ЦБ РФ"""
     try:
-        # Убраны пробелы в URL!
         url = "https://www.cbr-xml-daily.ru/daily_json.js"
         response = requests.get(url)
         data = response.json()
