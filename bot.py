@@ -7,7 +7,11 @@ import config
 bot = telebot.TeleBot(config.TOKEN)
 CHANNEL_ID = config.CHANNEL_ID
 
+# Глобальная переменная для хранения последнего отправленного текста
+LAST_SENT_MESSAGE = None
+
 async def update_channel_info():
+    global LAST_SENT_MESSAGE
     while True:
         try:
             usd_rate = bybit_api.get_usd_rate()
@@ -21,6 +25,7 @@ async def update_channel_info():
                 # Отправляем первое сообщение с курсами
                 new_message = bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='HTML')
                 config.LAST_MESSAGE_ID = new_message.message_id
+                LAST_SENT_MESSAGE = message
                 print(f"Первое сообщение с курсами отправлено. Сохраните LAST_MESSAGE_ID = {new_message.message_id} в config.py!")
 
                 # Закрепляем сообщение (если бот администратор)
@@ -30,10 +35,13 @@ async def update_channel_info():
                 except Exception as e:
                     print(f"Не удалось закрепить сообщение: {e}")
             else:
-                # Редактируем только сообщение с курсами
-                bot.edit_message_text(chat_id=CHANNEL_ID, message_id=config.LAST_MESSAGE_ID, text=message, parse_mode='HTML')
-
-            print(f"Информация обновлена: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                # Редактируем только если текст изменился
+                if message != LAST_SENT_MESSAGE:
+                    bot.edit_message_text(chat_id=CHANNEL_ID, message_id=config.LAST_MESSAGE_ID, text=message, parse_mode='HTML')
+                    LAST_SENT_MESSAGE = message
+                    print(f"Информация обновлена: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                else:
+                    print(f"Текст не изменился. Пропускаем обновление: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
         except Exception as e:
             print(f"Ошибка: {e}")

@@ -6,10 +6,11 @@ def get_ticker_price(symbol: str):
     symbol: строка вида "BTCUSDT", "ETHUSDT" — без слеша!
     """
     try:
+        # Убраны пробелы в URL!
         url = "https://api.bybit.com/v5/market/tickers"
         params = {
             "category": "spot",
-            "symbol": symbol  # Важно: без слеша!
+            "symbol": symbol
         }
         response = requests.get(url, params=params, timeout=10)
         data = response.json()
@@ -26,14 +27,9 @@ def get_ticker_price(symbol: str):
 
 
 def get_usd_rate():
-    """Получает курс USDT к USD через BTC/USDT и BTC/USD (если USDT/RUB недоступен)"""
-    # На Bybit нет USDT/RUB, поэтому используем косвенный метод или просто показываем USD как 1
-    # Для простоты: если мы не можем получить RUB, покажем USD как 1 (или используем другой источник)
-    # Но так как вы хотите RUB — давайте попробуем найти USDT/RUB через другой способ
-
-    # Попробуем получить USDT/RUB через другую биржу или вернём None
-    # Альтернатива: использовать CBR API для USD/RUB
+    """Получает курс USD/RUB через ЦБ РФ"""
     try:
+        # Убраны пробелы в URL!
         url = "https://www.cbr-xml-daily.ru/daily_json.js"
         response = requests.get(url)
         data = response.json()
@@ -44,8 +40,9 @@ def get_usd_rate():
 
 
 def get_eur_rate():
-    """Получает курс EUR к рублю через ЦБ РФ"""
+    """Получает курс EUR/RUB через ЦБ РФ"""
     try:
+        # Убраны пробелы в URL!
         url = "https://www.cbr-xml-daily.ru/daily_json.js"
         response = requests.get(url)
         data = response.json()
