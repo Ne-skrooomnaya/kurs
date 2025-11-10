@@ -8,7 +8,25 @@ from utils import bybit_api, message_formatter, fiat_api, gold_api
 from dotenv import set_key
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+import logging
+from datetime import datetime, timezone, timedelta
+
+class MoscowFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        utc_time = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        moscow_time = utc_time + timedelta(hours=3)
+        if datefmt:
+            return moscow_time.strftime(datefmt)
+        return moscow_time.isoformat()
+
+formatter = MoscowFormatter('%(asctime)s - %(levelname)s - %(message)s')
+
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 bot = telebot.TeleBot(config.TOKEN)
 CHANNEL_ID = config.CHANNEL_ID
