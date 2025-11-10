@@ -6,13 +6,13 @@ def get_ticker_price(symbol: str):
     symbol: строка вида "BTCUSDT", "ETHUSDT" — без слеша!
     """
     try:
-        # Убраны пробелы в URL!
         url = "https://api.bybit.com/v5/market/tickers"
         params = {
             "category": "spot",
             "symbol": symbol
         }
         response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()  # ← Добавлено! Выбросит исключение, если HTTP-код не 200
         data = response.json()
 
         if data.get("retCode") == 0 and data.get("result"):
@@ -24,7 +24,6 @@ def get_ticker_price(symbol: str):
     except Exception as e:
         print(f"Исключение при запросе {symbol}: {e}")
         return None
-
 
 def get_usd_rate():
     """Получает курс USD/RUB через ЦБ РФ"""
