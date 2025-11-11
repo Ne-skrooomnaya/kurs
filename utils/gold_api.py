@@ -1,74 +1,52 @@
+# utils/gold_api.py
+
 import requests
 import time
 import config
 
-_last_gold_price = None
-_last_gold_update_time = 0
-GOLD_CACHE_TTL = 900  # 15 минут
+_last_price = None
+_last_time = 0
+TTL = 900  # 15 минут
 
 def get_gold_price_usd():
-    """Возвращает цену золота в USD за унцию от GoldAPI (FOREXCOM)."""
-    global _last_gold_price, _last_gold_update_time
-
+    global _last_price, _last_time
     now = time.time()
-    is_cache_expired = (now - _last_gold_update_time) >= GOLD_CACHE_TTL
+
+    if _last_price is not None and (now - _last_time) < TTL:
+        print(f"🔁 ЗОЛОТО: кэш (${_last_price:,.2f}/унция)")
+        return _last_price
+
+    if not config.FMP_API_KEY:
+        print("❌ FMP_API_KEY не задан в .env")
+        return None
 
     try:
-        # Проверка 1: нужно ли обновлять кэш?
-        if _last_gold_price is None or is_cache_expired:
-            # Проверка 2: задан ли API-ключ?
-            if not config.GOLD_API_KEY:
-                print("❌ GOLD_API_KEY не задан в .env")
-                return None
+        url = "https://financialmodelingprep.com/stable/quote"
+        params = {"symbol": "GCUSD", "apikey": config.FMP_API_KEY}
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
 
-            # Проверка 3: формируем корректный URL (без пробелов!)
-            url = "https://www.goldapi.io/api/XAU/USD"
-            headers = {"x-access-token": config.GOLD_API_KEY}
+        if not data or "price" not in data[0]:
+            print(f"❌ FMP: неожиданный формат ответа: {data}")
+            return None
 
-            try:
-                # Проверка 4: делаем запрос
-                response = requests.get(url, headers=headers, timeout=10)
-                response.raise_for_status()  # Проверка HTTP-ошибок
-            except requests.exceptions.Timeout:
-                print("⚠️ GoldAPI: таймаут запроса")
-                return None
-            except requests.exceptions.ConnectionError:
-                print("⚠️ GoldAPI: ошибка подключения")
-                return None
-            except requests.exceptions.HTTPError as e:
-                print(f"⚠️ GoldAPI: HTTP ошибка {e.response.status_code}")
-                return None
-            except Exception as e:
-                print(f"⚠️ GoldAPI: неизвестная ошибка запроса: {e}")
-                return None
+        price = float(data[0]["price"])
+        _last_price = price
+        _last_time = now
+        print(f"✅ ЗОЛОТО (FMP): ${price:,.2f}/унция")
+        return price
 
-            try:
-                # Проверка 5: парсим JSON
-                data = response.json()
-            except ValueError:
-                print("❌ GoldAPI: ответ не в формате JSON")
-                return None
-
-            # Проверка 6: есть ли поле 'price'?
-            if "price" in data:
-                try:
-                    raw_price = data["price"]
-                    _last_gold_price = float(raw_price)
-                    _last_gold_update_time = now
-                    print(f"✅ ЗОЛОТО ОБНОВЛЕНО от GoldAPI: ${_last_gold_price:,.2f}/унция")
-                    return _last_gold_price
-                except (TypeError, ValueError):
-                    print(f"❌ GoldAPI: 'price' не является числом: {data['price']}")
-                    return None
-            else:
-                print(f"❌ GoldAPI: в ответе нет поля 'price'. Ответ: {data}")
-                return None
-
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 401:
+            print("❌ FMP: неверный API-ключ")
+        elif response.status_code == 403:
+            print("❌ FMP: доступ запрещён (проверьте эндпоинт и символ)")
+        elif response.status_code == 429:
+            print("❌ FMP: превышен лимит запросов (250/день)")
         else:
-            # Кэш ещё актуален
-            print(f"🔁 ЗОЛОТО: используем кэш (${_last_gold_price:,.2f}/унция, обновление каждые 15 мин)")
-            return _last_gold_price
-
+            print(f"❌ FMP HTTP ошибка {response.status_code}: {e}")
+        return None
     except Exception as e:
-        print(f"⚠️ Неожиданная ошибка в get_gold_price_usd: {e}")
+        print(f"❌ FMP ошибка: {e}")
         return None

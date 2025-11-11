@@ -1,23 +1,17 @@
-# utils/message_formatter.py
-
-import time
 from datetime import datetime, timezone, timedelta
 
-def create_message(usd_rub, eur_rub, gold_usd, bitcoin_usd, update_info):
-    if usd_rub is None or eur_rub is None or gold_usd is None or bitcoin_usd is None:
-        return "⚠️ Не удалось получить актуальные данные."
-
-    # Преобразуем UTC в Москву (UTC+3)
+def create_message(usd, eur, gold, btc, update_info):
     utc_now = datetime.now(timezone.utc)
     moscow_time = utc_now + timedelta(hours=3)
-    formatted_time = moscow_time.strftime('%Y-%m-%d %H:%M:%S')
+    time_str = moscow_time.strftime('%Y-%m-%d %H:%M:%S')
 
-    message = f"""💸 USD: ₽{usd_rub:.2f}
-🏆 EUR: ₽{eur_rub:.2f}
-🌕 Золото (CFD): ${gold_usd:,.2f}/унция
-🪩 BTC: ${bitcoin_usd:,.0f}
-
-🔄 Обновлено: {update_info}
-🕒 Последнее обновление: {formatted_time}
-"""
-    return message
+    lines = [
+        f"💸 USD: ₽{usd:.2f}" if usd else "💸 USD: ❌",
+        f"🏆 EUR: ₽{eur:.2f}" if eur else "🏆 EUR: ❌",
+        f"🌕 Золото (CFD): ${gold:,.2f}/унция" if gold else "🌕 Золото (CFD): ❌",
+        f"🪩 BTC: ${btc:,.0f}" if btc else "🪩 BTC: ❌",
+        "",
+        f"🔄 Обновлено: {update_info}",
+        f"🕒 {time_str}"
+    ]
+    return "\n".join(lines)
