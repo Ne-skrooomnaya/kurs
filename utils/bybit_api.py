@@ -1,6 +1,6 @@
 import requests
 
-BYBIT_URL = "https://api.bybit.com/v5/market/tickers"
+BYBIT_URL = "https://api.bybit.com/v5/market/tickers"  # ← исправлено: https://
 
 def get_bitcoin_price():
     try:

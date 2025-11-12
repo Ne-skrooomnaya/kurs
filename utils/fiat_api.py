@@ -1,22 +1,15 @@
-# utils/fiat_api.py
-
 import requests
+from bs4 import BeautifulSoup
 
-FRANKFURTER_URL = "https://api.frankfurter.dev/v1/latest"
+FRANKFURTER_URL = "https://api.frankfurter.dev/v1/latest"  # ← исправлено: https://
 
 def _get_usd_to_eur_from_frankfurter():
-    """Получает USD/EUR через Frankfurter (база EUR -> rates.USD = сколько USD за 1 EUR)."""
     try:
-        response = requests.get(
-            FRANKFURTER_URL,
-            params={"symbols": "USD"},
-            timeout=15
-        )
+        response = requests.get(FRANKFURTER_URL, params={"symbols": "USD"}, timeout=15)
         response.raise_for_status()
         data = response.json()
         usd_rate = data["rates"].get("USD")
         if usd_rate:
-            # USD/EUR = 1 / (EUR/USD)
             usd_to_eur = 1.0 / float(usd_rate)
             print(f"✅ USD/EUR из Frankfurter: {usd_to_eur:.4f}")
             return usd_to_eur
@@ -28,9 +21,8 @@ def _get_usd_to_eur_from_frankfurter():
         return None
 
 def _get_eur_to_rub_from_cbr():
-    """Получает EUR/RUB напрямую из ЦБ РФ."""
     try:
-        response = requests.get("https://www.cbr-xml-daily.ru/daily_json.js", timeout=10)
+        response = requests.get("https://www.cbr-xml-daily.ru/daily_json.js", timeout=10)  # ← https://
         response.raise_for_status()
         data = response.json()
         eur_rub = data["Valute"]["EUR"]["Value"]
@@ -41,9 +33,8 @@ def _get_eur_to_rub_from_cbr():
         return None
 
 def _get_usd_to_rub_from_cbr():
-    """Резервный fallback: USD/RUB напрямую из ЦБ РФ."""
     try:
-        response = requests.get("https://www.cbr-xml-daily.ru/daily_json.js", timeout=10)
+        response = requests.get("https://www.cbr-xml-daily.ru/daily_json.js", timeout=10)  # ← https://
         response.raise_for_status()
         data = response.json()
         usd_rub = data["Valute"]["USD"]["Value"]
@@ -53,27 +44,53 @@ def _get_usd_to_rub_from_cbr():
         print(f"❌ Ошибка ЦБ РФ (USD/RUB): {e}")
         return None
 
+def _get_gold_price_rub_per_gram_from_cbr():
+    try:
+        response = requests.get("https://cbr.ru/hd_base/metall/metall_base_new/", timeout=15)  # ← https://
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        table = soup.find('table', class_='data')
+        if not table:
+            print("❌ ЦБ РФ: не найдена таблица с ценами на металлы")
+            return None
+
+        rows = table.find_all('tr')
+        if len(rows) < 2:
+            print("❌ ЦБ РФ: нет данных в таблице")
+            return None
+
+        first_data_row = rows[1]
+        cells = first_data_row.find_all('td')
+        if len(cells) < 2:
+            print("❌ ЦБ РФ: недостаточно данных в строке")
+            return None
+
+        gold_price_str = cells[1].text.strip().replace(' ', '').replace(',', '.')
+        gold_price = float(gold_price_str)
+        print(f"✅ Золото из ЦБ РФ (HTML): {gold_price:.2f} ₽/грамм")
+        return gold_price
+
+    except Exception as e:
+        print(f"❌ Ошибка парсинга ЦБ РФ (золото): {e}")
+        return None
+
 def get_usd_rate():
-    # Шаг 1: Получить USD/EUR
     usd_to_eur = _get_usd_to_eur_from_frankfurter()
     if usd_to_eur is None:
-        # Если не удалось — fallback на прямой USD/RUB из ЦБ
         print("⚠️ Не удалось получить USD/EUR → используем USD/RUB напрямую из ЦБ РФ")
         return _get_usd_to_rub_from_cbr()
 
-    # Шаг 2: Получить EUR/RUB
     eur_to_rub = _get_eur_to_rub_from_cbr()
     if eur_to_rub is None:
         print("⚠️ Не удалось получить EUR/RUB → используем USD/RUB напрямую из ЦБ РФ")
         return _get_usd_to_rub_from_cbr()
 
-    # Шаг 3: Вычислить USD/RUB = USD/EUR * EUR/RUB
     usd_to_rub = usd_to_eur * eur_to_rub
     print(f"✅ USD/RUB = USD/EUR × EUR/RUB = {usd_to_eur:.4f} × {eur_to_rub:.2f} = {usd_to_rub:.2f}")
     return usd_to_rub
 
 def get_eur_rate():
-    # Для EUR/RUB — просто берём из ЦБ РФ
     eur_rub = _get_eur_to_rub_from_cbr()
     if eur_rub is not None:
         return eur_rub

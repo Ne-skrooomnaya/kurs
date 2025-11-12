@@ -6,7 +6,14 @@ from utils import bybit_api, message_formatter, fiat_api, gold_api
 from dotenv import set_key
 from datetime import datetime, timezone, timedelta
 
-# Настройка логирования с московским временем
+# Глобальные переменные
+LAST_USD = None
+LAST_EUR = None
+LAST_GOLD = None
+LAST_BTC = None
+
+
+# Логирование
 class MoscowFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
         utc_time = datetime.fromtimestamp(record.created, tz=timezone.utc)
@@ -18,101 +25,112 @@ class MoscowFormatter(logging.Formatter):
 formatter = MoscowFormatter('%(asctime)s - %(levelname)s - %(message)s')
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 
 bot = telebot.TeleBot(config.TOKEN)
 CHANNEL_ID = config.CHANNEL_ID
-LAST_SENT_MESSAGE = None
-
 _last_update = {'usd': 0, 'eur': 0, 'btc': 0, 'gold': 0}
-UPDATE_INTERVAL_USD_EUR_BTC = 600  # 10 минут
-UPDATE_INTERVAL_GOLD = 900         # 15 минут
-MAIN_LOOP_INTERVAL = 300           # проверка каждые 5 минут
+UPDATE_INTERVAL_USD_EUR_BTC = 600
+UPDATE_INTERVAL_GOLD = 900
+MAIN_LOOP_INTERVAL = 300
 
 def update_last_message_id(new_id):
     set_key('.env', 'LAST_MESSAGE_ID', str(new_id))
     config.LAST_MESSAGE_ID = new_id
 
 def get_fresh_data():
+    global LAST_USD, LAST_EUR, LAST_GOLD, LAST_BTC
     now = time.time()
     updated = []
+    failed = []
 
-    usd_rub = eur_rub = gold_usd = btc_usd = None
-
+    # USD
+    usd = LAST_USD
     if now - _last_update['usd'] >= UPDATE_INTERVAL_USD_EUR_BTC:
-        usd_rub = fiat_api.get_usd_rate()
-        if usd_rub is not None:
+        new_usd = fiat_api.get_usd_rate()
+        if new_usd is not None:
             _last_update['usd'] = now
             updated.append('USD')
+            LAST_USD = new_usd
+            usd = new_usd
         else:
-            logging.error("❌ USD не обновлено даже через ЦБ РФ")
-    else:
-        usd_rub = fiat_api.get_usd_rate()
+            logging.error("❌ USD не обновлено")
+            failed.append('USD')
 
+    # EUR
+    eur = LAST_EUR
     if now - _last_update['eur'] >= UPDATE_INTERVAL_USD_EUR_BTC:
-        eur_rub = fiat_api.get_eur_rate()
-        if eur_rub is not None:
+        new_eur = fiat_api.get_eur_rate()
+        if new_eur is not None:
             _last_update['eur'] = now
             updated.append('EUR')
+            LAST_EUR = new_eur
+            eur = new_eur
         else:
-            logging.error("❌ EUR не обновлено даже через ЦБ РФ")
-    else:
-        eur_rub = fiat_api.get_eur_rate()
+            logging.error("❌ EUR не обновлено")
+            failed.append('EUR')
 
+    # BTC
+    btc = LAST_BTC
     if now - _last_update['btc'] >= UPDATE_INTERVAL_USD_EUR_BTC:
-        btc_usd = bybit_api.get_bitcoin_price()
-        if btc_usd is not None:
+        new_btc = bybit_api.get_bitcoin_price()
+        if new_btc is not None:
             _last_update['btc'] = now
             updated.append('BTC')
+            LAST_BTC = new_btc
+            btc = new_btc
         else:
             logging.error("❌ BTC не обновлено")
-    else:
-        btc_usd = bybit_api.get_bitcoin_price()
+            failed.append('BTC')
 
-    if now - _last_update['gold'] >= UPDATE_INTERVAL_GOLD:
-        gold_usd = gold_api.get_gold_price_usd()
-        if gold_usd is not None:
+    # Gold
+     # === ЗОЛОТО ===
+    gold = LAST_GOLD  # ← по умолчанию — кэш
+    if now - _last_update['gold'] >= UPDATE_INTERVAL_GOLD:  # каждые 15 мин
+        new_gold = gold_api.get_gold_price_usd()
+        if new_gold is not None:
             _last_update['gold'] = now
             updated.append('Золото')
+            LAST_GOLD = new_gold
+            gold = new_gold
         else:
             logging.error("❌ Золото не обновлено")
-    else:
-        gold_usd = gold_api.get_gold_price_usd()
+            failed.append('Золото')  # ← добавляем в failed, но gold = LAST_GOLD
 
-    update_info = ", ".join(updated) if updated else "ничего"
-    return usd_rub, eur_rub, gold_usd, btc_usd, update_info
+    return usd, eur, gold, btc, updated, failed
 
 def send_or_update_message():
-    global LAST_SENT_MESSAGE
-
     try:
-        usd_rub, eur_rub, gold_usd, btc_usd, update_info = get_fresh_data()
-        message = message_formatter.create_message(usd_rub, eur_rub, gold_usd, btc_usd, update_info)
+        usd, eur, gold, btc, updated, failed = get_fresh_data()
+        message = message_formatter.create_message(usd, eur, gold, btc, updated, failed)
 
         if config.LAST_MESSAGE_ID is None:
-            new_message = bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='HTML')
-            config.LAST_MESSAGE_ID = new_message.message_id
-            update_last_message_id(new_message.message_id)
-            logging.info(f"Первое сообщение отправлено. ID: {new_message.message_id}")
+            new_msg = bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='HTML')
+            config.LAST_MESSAGE_ID = new_msg.message_id
+            update_last_message_id(new_msg.message_id)
+            logging.info(f"✅ Первое сообщение. ID: {new_msg.message_id}")
         else:
             try:
-                bot.edit_message_text(chat_id=CHANNEL_ID, message_id=config.LAST_MESSAGE_ID, text=message, parse_mode='HTML')
-                logging.info(f"Сообщение обновлено: {update_info}")
+                bot.edit_message_text(
+                    chat_id=CHANNEL_ID,
+                    message_id=config.LAST_MESSAGE_ID,
+                    text=message,
+                    parse_mode='HTML'
+                )
+                logging.info(f"✏️ Сообщение обновлено: {', '.join(updated) if updated else 'ничего'}")
             except Exception as e:
-                logging.error(f"Не удалось отредактировать сообщение: {e}")
-                new_message = bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='HTML')
-                config.LAST_MESSAGE_ID = new_message.message_id
-                update_last_message_id(new_message.message_id)
-                logging.info(f"Новое сообщение отправлено. ID: {new_message.message_id}")
+                logging.warning(f"⚠️ Не удалось отредактировать — отправляем новое: {e}")
+                new_msg = bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode='HTML')
+                config.LAST_MESSAGE_ID = new_msg.message_id
+                update_last_message_id(new_msg.message_id)
 
     except Exception as e:
-        logging.error(f"Критическая ошибка: {e}")
+        logging.error(f"🔥 Критическая ошибка: {e}")
 
 if __name__ == "__main__":
-    logging.info("🚀 Бот запущен. Обновление каждые 5 минут (курсы — каждые 10/15 мин).")
+    logging.info("🚀 Бот запущен")
     while True:
         send_or_update_message()
         time.sleep(MAIN_LOOP_INTERVAL)
